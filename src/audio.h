@@ -28,6 +28,9 @@ namespace audio {
 
   extern opus_stream_config_t stream_configs[MAX_STREAM_CONFIG];
 
+  int
+  map_stream(int channels, bool quality);
+
   struct config_t {
     enum flags_e : int {
       HIGH_QUALITY,
@@ -39,6 +42,8 @@ namespace audio {
     int channels;
     int mask;
 
+    int audioFormat; // 0 - OPUS, 1 - AC3, 2 - AAC
+
     std::bitset<MAX_FLAGS> flags;
   };
 
@@ -46,4 +51,20 @@ namespace audio {
   using packet_t = std::pair<void *, buffer_t>;
   void
   capture(safe::mail_t mail, config_t config, void *channel_data);
+
+  class audio_encoder {
+  public:
+    virtual ~audio_encoder() = default;
+    virtual bool init(config_t &config) = 0;
+    virtual bool encode(std::vector<std::int16_t> &sample, buffer_t &packet) = 0;
+
+    static audio_encoder *create(config_t &config);
+  protected:
+    static audio_encoder *
+    create_opus();
+    static audio_encoder *
+    create_ac3();
+  };
+
+
 }  // namespace audio

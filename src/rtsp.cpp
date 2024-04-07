@@ -818,6 +818,8 @@ namespace rtsp_stream {
       ss << "a=rtpmap:98 AV1/90000"sv << std::endl;
     }
 
+    ss << "a=x-ss-audio.supportedCodec=ac3"sv << std::endl;
+
     for (int x = 0; x < audio::MAX_STREAM_CONFIG; ++x) {
       auto &stream_config = audio::stream_configs[x];
       std::uint8_t mapping[platf::speaker::MAX_SPEAKERS];
@@ -986,6 +988,7 @@ namespace rtsp_stream {
       config.audio.channels = util::from_view(args.at("x-nv-audio.surround.numChannels"sv));
       config.audio.mask = util::from_view(args.at("x-nv-audio.surround.channelMask"sv));
       config.audio.packetDuration = util::from_view(args.at("x-nv-aqos.packetDuration"sv));
+      config.audio.audioFormat = util::from_view(args.at("x-ss-audio.codec"sv));
 
       config.audio.flags[audio::config_t::HIGH_QUALITY] =
         util::from_view(args.at("x-nv-audio.surround.AudioQuality"sv));

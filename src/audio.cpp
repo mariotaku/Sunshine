@@ -17,7 +17,6 @@
 
 namespace audio {
   using namespace std::literals;
-  using opus_t = util::safe_ptr<OpusMSEncoder, opus_multistream_encoder_destroy>;
   using sample_queue_t = std::shared_ptr<safe::queue_t<std::vector<std::int16_t>>>;
 
   struct audio_ctx_t {
@@ -34,9 +33,6 @@ namespace audio {
   start_audio_control(audio_ctx_t &ctx);
   static void
   stop_audio_control(audio_ctx_t &);
-
-  int
-  map_stream(int channels, bool quality);
 
   constexpr auto SAMPLE_RATE = 48000;
 
@@ -98,38 +94,27 @@ namespace audio {
   void
   encodeThread(sample_queue_t samples, config_t config, void *channel_data) {
     auto packets = mail::man->queue<packet_t>(mail::audio_packets);
-    auto stream = &stream_configs[map_stream(config.channels, config.flags[config_t::HIGH_QUALITY])];
 
     // Encoding takes place on this thread
     platf::adjust_thread_priority(platf::thread_priority_e::high);
 
-    opus_t opus { opus_multistream_encoder_create(
-      stream->sampleRate,
-      stream->channelCount,
-      stream->streams,
-      stream->coupledStreams,
-      stream->mapping,
-      OPUS_APPLICATION_RESTRICTED_LOWDELAY,
-      nullptr) };
+    audio_encoder *encoder = audio_encoder::create(config);
+    if (!encoder) {
+      BOOST_LOG(error) << "Unsupported audio format"sv;
+      return;
+    }
 
-    opus_multistream_encoder_ctl(opus.get(), OPUS_SET_BITRATE(stream->bitrate));
-    opus_multistream_encoder_ctl(opus.get(), OPUS_SET_VBR(0));
-
-    auto frame_size = config.packetDuration * stream->sampleRate / 1000;
     while (auto sample = samples->pop()) {
       buffer_t packet { 1400 };
 
-      int bytes = opus_multistream_encode(opus.get(), sample->data(), frame_size, std::begin(packet), packet.size());
-      if (bytes < 0) {
-        BOOST_LOG(error) << "Couldn't encode audio: "sv << opus_strerror(bytes);
+      if (!encoder->encode(*sample, packet)) {
         packets->stop();
-
-        return;
+        break;
       }
 
-      packet.fake_resize(bytes);
       packets->raise(channel_data, std::move(packet));
     }
+    delete encoder;
   }
 
   void
@@ -298,5 +283,25 @@ namespace audio {
       // Best effort, it's allowed to fail
       ctx.control->set_sink(sink);
     }
+  }
+
+  audio_encoder *
+  audio_encoder::create(audio::config_t &config) {
+    audio_encoder *encoder;
+    switch (config.audioFormat) {
+      case 0:
+        encoder = create_opus();
+        break;
+      case 1:
+        encoder = create_ac3();
+        break;
+      default:
+        return nullptr;
+    }
+    if (!encoder->init(config)) {
+      delete encoder;
+      return nullptr;
+    }
+    return encoder;
   }
 }  // namespace audio
