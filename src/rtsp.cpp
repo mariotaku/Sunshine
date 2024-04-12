@@ -818,7 +818,7 @@ namespace rtsp_stream {
       ss << "a=rtpmap:98 AV1/90000"sv << std::endl;
     }
 
-    ss << "a=x-ss-audio.supportedCodec=ac3"sv << std::endl;
+    ss << "a=x-ss-audio.supportedCodec:" << AUDIO_FORMAT_AC3 << std::endl;
 
     for (int x = 0; x < audio::MAX_STREAM_CONFIG; ++x) {
       auto &stream_config = audio::stream_configs[x];
@@ -979,6 +979,7 @@ namespace rtsp_stream {
     args.try_emplace("x-nv-aqos.qosTrafficType"sv, "4"sv);
     args.try_emplace("x-ml-video.configuredBitrateKbps"sv, "0"sv);
     args.try_emplace("x-ss-general.encryptionEnabled"sv, "0"sv);
+    args.try_emplace("x-ss-audio.codec"sv, "1"sv);
 
     stream::config_t config;
 
@@ -987,7 +988,7 @@ namespace rtsp_stream {
     try {
       config.audio.channels = util::from_view(args.at("x-nv-audio.surround.numChannels"sv));
       config.audio.mask = util::from_view(args.at("x-nv-audio.surround.channelMask"sv));
-      config.audio.packetDuration = util::from_view(args.at("x-nv-aqos.packetDuration"sv));
+      config.audio.packetDuration = util::from_fraction(args.at("x-nv-aqos.packetDuration"sv));
       config.audio.audioFormat = util::from_view(args.at("x-ss-audio.codec"sv));
 
       config.audio.flags[audio::config_t::HIGH_QUALITY] =

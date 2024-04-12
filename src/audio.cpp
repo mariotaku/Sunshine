@@ -176,7 +176,7 @@ namespace audio {
       }
     }
 
-    auto frame_size = config.packetDuration * stream->sampleRate / 1000;
+    auto frame_size = (int) round(config.packetDuration * stream->sampleRate / 1000);
     auto mic = control->microphone(stream->mapping, stream->channelCount, stream->sampleRate, frame_size);
     if (!mic) {
       return;
@@ -289,11 +289,14 @@ namespace audio {
   audio_encoder::create(audio::config_t &config) {
     audio_encoder *encoder;
     switch (config.audioFormat) {
-      case 0:
+      case AUDIO_FORMAT_OPUS:
         encoder = create_opus();
         break;
-      case 1:
+      case AUDIO_FORMAT_AC3:
         encoder = create_ac3();
+        break;
+      case AUDIO_FORMAT_EAC3:
+        encoder = create_eac3();
         break;
       default:
         return nullptr;

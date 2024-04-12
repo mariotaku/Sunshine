@@ -20,7 +20,7 @@ public:
 
 protected:
   opus_t opus;
-  int frame_size;
+  int frame_size = 240;
 };
 
 bool
@@ -36,7 +36,7 @@ opus_encoder::init(config_t &config) {
     nullptr) };
   opus_multistream_encoder_ctl(opus.get(), OPUS_SET_BITRATE(stream->bitrate));
   opus_multistream_encoder_ctl(opus.get(), OPUS_SET_VBR(0));
-  frame_size = config.packetDuration * stream->sampleRate / 1000;
+  frame_size = (int) (config.packetDuration * stream->sampleRate / 1000);
   return true;
 }
 

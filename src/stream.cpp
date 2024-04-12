@@ -386,7 +386,7 @@ namespace stream {
       std::uint16_t sequenceNumber;
       // avRiKeyId == util::endian::big(First (sizeof(avRiKeyId)) bytes of launch_session->iv)
       std::uint32_t avRiKeyId;
-      std::uint32_t timestamp;
+      double timestamp;
       udp::endpoint peer;
 
       util::buffer_t<char> shards;
@@ -1537,7 +1537,7 @@ namespace stream {
       }
 
       audio_packet->rtp.sequenceNumber = util::endian::big(sequenceNumber);
-      audio_packet->rtp.timestamp = util::endian::big(timestamp);
+      audio_packet->rtp.timestamp = util::endian::big((int) timestamp);
 
       session->audio.sequenceNumber++;
       session->audio.timestamp += session->config.audio.packetDuration;

@@ -449,6 +449,16 @@ namespace util {
     return from_chars(std::begin(number), std::end(number));
   }
 
+  inline double
+  from_fraction(const std::string_view &fraction) {
+    auto slash = fraction.find('/');
+    if (slash == std::string_view::npos) {
+      return (double) from_chars(std::begin(fraction), std::end(fraction));
+    }
+    return (double) from_chars(std::begin(fraction), std::begin(fraction) + slash) /
+           (double) from_chars(std::begin(fraction) + slash + 1, std::end(fraction));
+  }
+
   template <class X, class Y>
   class Either: public std::variant<std::monostate, X, Y> {
   public:

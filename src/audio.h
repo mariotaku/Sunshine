@@ -38,11 +38,11 @@ namespace audio {
       MAX_FLAGS
     };
 
-    int packetDuration;
+    double packetDuration;
     int channels;
     int mask;
 
-    int audioFormat; // 0 - OPUS, 1 - AC3, 2 - AAC
+    int audioFormat; // AUDIO_FORMAT_* from Limelight.h
 
     std::bitset<MAX_FLAGS> flags;
   };
@@ -64,6 +64,8 @@ namespace audio {
     create_opus();
     static audio_encoder *
     create_ac3();
+    static audio_encoder *
+    create_eac3();
   };
 
 
