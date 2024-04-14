@@ -5,17 +5,6 @@ using namespace std::literals;
 
 constexpr auto SAMPLE_RATE = 48000;
 
-#ifdef av_err2str
-  #undef av_err2str
-  #include <iomanip>
-  #include <string>
-av_always_inline std::string av_err2string(int errnum) {
-  char str[AV_ERROR_MAX_STRING_SIZE];
-  return av_make_error_string(str, AV_ERROR_MAX_STRING_SIZE, errnum);
-}
-  #define av_err2str(err) av_err2string(err).c_str()
-#endif
-
 bool
 ff_encoder::init(config_t &config) {
   swr = swr_alloc();
@@ -36,9 +25,8 @@ ff_encoder::init(config_t &config) {
   }
   ctx->sample_rate = SAMPLE_RATE;
   ctx->sample_fmt = AV_SAMPLE_FMT_FLTP;
-  ctx->max_samples = samples_per_frame;
   // With this bitrate, each audio frame will be roughly 1280 bytes
-  ctx->bit_rate = 320000;
+  ctx->bit_rate = bit_rate;
   if (!codec->ch_layouts) {
     av_channel_layout_default(&ctx->ch_layout, config.channels);
   }
@@ -55,6 +43,11 @@ ff_encoder::init(config_t &config) {
     BOOST_LOG(error) << "Failed to open codec"sv;
     return false;
   }
+  if (ctx->frame_size != samples_per_frame) {
+    BOOST_LOG(error) << "max_samples: " << ctx->frame_size << " != " << samples_per_frame;
+    return false;
+  }
+
   frame = new_frame(ctx->frame_size, ctx->sample_fmt, &ctx->ch_layout);
   if (!frame) {
     BOOST_LOG(error) << "Could not allocate frame"sv;
@@ -101,7 +94,7 @@ ff_encoder::encode(std::vector<std::int16_t> &sample, buffer_t &packet) {
   }
   int ret;
   if ((ret = av_frame_make_writable(frame_s16)) < 0) {
-    BOOST_LOG(error) << "Could not make frame_s16 writable: "sv << av_err2str(ret);
+    BOOST_LOG(error) << "Could not make frame_s16 writable: "sv;
     return false;
   }
   auto sample_fmt = (AVSampleFormat) frame_s16->format;
@@ -119,12 +112,12 @@ ff_encoder::encode(std::vector<std::int16_t> &sample, buffer_t &packet) {
     return false;
   }
   if ((ret = avcodec_send_frame(ctx, frame)) < 0) {
-    BOOST_LOG(error) << "Could not send frame: "sv << av_err2str(ret);
+    BOOST_LOG(error) << "Could not send frame: "sv;
     return false;
   }
   AVPacket pkt { nullptr };
   if ((ret = avcodec_receive_packet(ctx, &pkt)) < 0) {
-    BOOST_LOG(error) << "Could not receive packet: "sv << av_err2str(ret);
+    BOOST_LOG(error) << "Could not receive packet: "sv;
     return false;
   }
   memcpy(std::begin(packet), pkt.data, pkt.size);
@@ -149,6 +142,6 @@ ff_encoder::new_frame(int samples, AVSampleFormat format, const AVChannelLayout 
   return frame;
 }
 
-ff_encoder::ff_encoder(AVCodecID codec_id, int samples_per_frame):
-    codec_id(codec_id), samples_per_frame(samples_per_frame) {
+ff_encoder::ff_encoder(AVCodecID codec_id, int bit_rate, int samples_per_frame):
+    codec_id(codec_id), bit_rate(bit_rate), samples_per_frame(samples_per_frame) {
 }

@@ -64,8 +64,6 @@ namespace audio {
     create_opus();
     static audio_encoder *
     create_ac3();
-    static audio_encoder *
-    create_eac3();
   };
 
 

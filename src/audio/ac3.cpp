@@ -6,7 +6,7 @@ using namespace std::literals;
 class ac3_encoder: public ff_encoder {
 public:
   ac3_encoder():
-      ff_encoder(AV_CODEC_ID_AC3, 1536) {};
+      ff_encoder(AV_CODEC_ID_AC3, 320000, 1536) {};
 };
 
 audio_encoder *

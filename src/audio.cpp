@@ -295,10 +295,8 @@ namespace audio {
       case AUDIO_FORMAT_AC3:
         encoder = create_ac3();
         break;
-      case AUDIO_FORMAT_EAC3:
-        encoder = create_eac3();
-        break;
       default:
+        BOOST_LOG(error) << "Unsupported audio format: " << std::hex << config.audioFormat;
         return nullptr;
     }
     if (!encoder->init(config)) {

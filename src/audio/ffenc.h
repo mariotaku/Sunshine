@@ -21,9 +21,11 @@ namespace audio {
     encode(std::vector<std::int16_t> &sample, buffer_t &packet) override;
 
   protected:
-    explicit ff_encoder(AVCodecID codec_id, int samples_per_frame);
+    explicit ff_encoder(AVCodecID codec_id, int bitrate, int samples_per_frame);
     AVCodecID codec_id;
+    int bit_rate;
     int samples_per_frame;
+
   private:
     SwrContext *swr = nullptr;
     AVCodecContext *ctx = nullptr;
@@ -34,4 +36,4 @@ namespace audio {
     new_frame(int samples, AVSampleFormat format, const AVChannelLayout *layout);
   };
 
-}
+}  // namespace audio

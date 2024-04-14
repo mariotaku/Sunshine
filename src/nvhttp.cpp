@@ -703,7 +703,7 @@ namespace nvhttp {
       codec_mode_flags |= SCM_AV1_MAIN10;
     }
     tree.put("root.ServerCodecModeSupport", codec_mode_flags);
-    tree.put("root.ServerAudioCodecSupport", SAC_OPUS | SAC_AC3 | SAC_EAC3);
+    tree.put("root.ServerAudioCodecSupport", SAC_OPUS | SAC_AC3);
 
     pt::ptree display_nodes;
     for (auto &resolution : config::nvhttp.resolutions) {

@@ -818,7 +818,7 @@ namespace rtsp_stream {
       ss << "a=rtpmap:98 AV1/90000"sv << std::endl;
     }
 
-    int supportedAudioCodecs = AUDIO_FORMAT_OPUS | AUDIO_FORMAT_AC3 | AUDIO_FORMAT_EAC3;
+    int supportedAudioCodecs = AUDIO_FORMAT_OPUS | AUDIO_FORMAT_AC3;
     ss << "a=x-ss-audio.supportedCodec:" << supportedAudioCodecs << std::endl;
 
     for (int x = 0; x < audio::MAX_STREAM_CONFIG; ++x) {
