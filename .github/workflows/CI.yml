@@ -28,7 +28,7 @@ jobs:
   setup_release:
     name: Setup Release
     outputs:
-      publish_release: ${{ steps.setup_release.outputs.publish_release }}
+      publish_release: ${{ secrets.GH_BOT_TOKEN && steps.setup_release.outputs.publish_release }}
       release_commit: ${{ steps.setup_release.outputs.release_commit }}
       release_tag: ${{ steps.setup_release.outputs.release_tag }}
       release_version: ${{ steps.setup_release.outputs.release_version }}
@@ -987,9 +987,8 @@ jobs:
             -DSUNSHINE_ASSETS_DIR=assets \
             -DTESTS_PYTHON_EXECUTABLE='${{ steps.python-path.outputs.python-path }}' \
             -DTESTS_SOFTWARE_ENCODER_UNAVAILABLE='skip' \
-            -G "MinGW Makefiles" \
             ..
-          mingw32-make -j$(nproc)
+          cmake --build . -- -j$(nproc)
 
       - name: Package Windows
         shell: msys2 {0}
