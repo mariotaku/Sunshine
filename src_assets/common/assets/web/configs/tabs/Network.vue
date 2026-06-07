@@ -27,6 +27,14 @@ const effectivePort = computed(() => +config.value?.port ?? defaultMoonlightPort
               default="false"
     ></Checkbox>
 
+    <!-- Adaptive Bandwidth Limit -->
+    <Checkbox class="mb-3"
+              id="adaptive_bandwidth_limit"
+              locale-prefix="config"
+              v-model="config.adaptive_bandwidth_limit"
+              default="true"
+    ></Checkbox>
+
     <!-- Address family -->
     <div class="mb-3">
       <label for="address_family" class="form-label">{{ $t('config.address_family') }}</label>

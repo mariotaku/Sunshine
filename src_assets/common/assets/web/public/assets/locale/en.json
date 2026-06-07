@@ -107,6 +107,8 @@
     "adapter_name_desc_linux_3": "Replace ``renderD129`` with the device from above to lists the name and capabilities of the device. To be supported by Sunshine, it needs to have at the very minimum:",
     "adapter_name_desc_windows": "Manually specify a GPU to use for capture. If unset, the GPU is chosen automatically. We strongly recommend leaving this field blank to use automatic GPU selection! Note: This GPU must have a display connected and powered on. The appropriate values can be found using the following command:",
     "adapter_name_placeholder_windows": "Radeon RX 580 Series",
+    "adaptive_bandwidth_limit": "Adaptive Bandwidth Limit",
+    "adaptive_bandwidth_limit_desc": "Automatically cap the rate at which video packets are sent to match the network bottleneck, learned from client feedback, instead of sending at a fixed rate. This prevents large keyframe bursts from overflowing a slow link (for example a 100 Mbps client behind a gigabit host), which can otherwise cause stutter or a black screen. Has no effect on a fast, loss-free connection.",
     "add": "Add",
     "address_family": "Address Family",
     "address_family_both": "IPv4+IPv6",

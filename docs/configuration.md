@@ -1470,6 +1470,36 @@ editing the `conf` file in a text editor. Use the examples as reference.
     </tr>
 </table>
 
+### adaptive_bandwidth_limit
+
+<table>
+    <tr>
+        <td>Description</td>
+        <td colspan="2">
+            Automatically cap the rate at which video packets are sent to match the
+            network bottleneck, learned from client feedback, instead of sending at
+            a fixed rate. This prevents large keyframe bursts from overflowing a slow
+            link (for example a 100 Mbps client behind a gigabit host), which
+            otherwise causes silent packet loss and a black screen / decode-error
+            spiral.
+            @note{On a fast, loss-free path this has no effect, as the rate stays at
+            the same ceiling used when disabled.}
+        </td>
+    </tr>
+    <tr>
+        <td>Default</td>
+        <td colspan="2">@code{}
+            enabled
+            @endcode</td>
+    </tr>
+    <tr>
+        <td>Example</td>
+        <td colspan="2">@code{}
+            adaptive_bandwidth_limit = enabled
+            @endcode</td>
+    </tr>
+</table>
+
 ### address_family
 
 <table>
@@ -1986,35 +2016,6 @@ editing the `conf` file in a text editor. Use the examples as reference.
         <td>Example</td>
         <td colspan="2">@code{}
             fec_percentage = 20
-            @endcode</td>
-    </tr>
-</table>
-
-### adaptive_pacing
-
-<table>
-    <tr>
-        <td>Description</td>
-        <td colspan="2">
-            Adapt the rate at which video packets are sent to the network bottleneck,
-            learned from client feedback, instead of using a fixed target.
-            This prevents large keyframe bursts from overflowing a slow link
-            (for example a 100 Mbps client behind a gigabit host), which otherwise
-            causes silent packet loss and a black screen / decode-error spiral.
-            @note{On a fast, loss-free path this has no effect, as the controller
-            idles at the same rate used when disabled.}
-        </td>
-    </tr>
-    <tr>
-        <td>Default</td>
-        <td colspan="2">@code{}
-            enabled
-            @endcode</td>
-    </tr>
-    <tr>
-        <td>Example</td>
-        <td colspan="2">@code{}
-            adaptive_pacing = enabled
             @endcode</td>
     </tr>
 </table>

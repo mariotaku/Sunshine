@@ -953,7 +953,7 @@ namespace stream {
     server->map(packetTypes[IDX_PERIODIC_PING], [](session_t *session, const std::string_view &payload) {
       BOOST_LOG(verbose) << "type [IDX_PERIODIC_PING]"sv;
 
-      if (!config::stream.adaptive_pacing) {
+      if (!config::stream.adaptive_bandwidth_limit) {
         return;
       }
 
@@ -977,7 +977,7 @@ namespace stream {
         // genuinely improved path is reclaimed faster (a failed probe will
         // double it again in the FEC-status handler).
         v.pacing_probe_interval = std::max(pacing::probe_interval_min, v.pacing_probe_interval / 2);
-        BOOST_LOG(debug) << "Adaptive pacing: probe up -> "sv << (new_rate / 1000 / 1000) << " Mbps"sv;
+        BOOST_LOG(debug) << "Adaptive bandwidth limit: probe up -> "sv << (new_rate / 1000 / 1000) << " Mbps"sv;
       }
     });
 
@@ -1023,7 +1023,7 @@ namespace stream {
       auto totalDataPackets = read_be16(payload.data() + k_total_data_off);
       auto receivedDataPackets = read_be16(payload.data() + k_recv_data_off);
 
-      if (!config::stream.adaptive_pacing || totalDataPackets == 0) {
+      if (!config::stream.adaptive_bandwidth_limit || totalDataPackets == 0) {
         return;
       }
 
@@ -1054,7 +1054,7 @@ namespace stream {
       // too aggressive, so wait longer before trying to climb again.
       v.pacing_probe_interval = std::min(pacing::probe_interval_max, v.pacing_probe_interval * 2);
 
-      BOOST_LOG(debug) << "Adaptive pacing: "sv << (int) (f * 100) << "% loss -> "sv
+      BOOST_LOG(debug) << "Adaptive bandwidth limit: "sv << (int) (f * 100) << "% loss -> "sv
                        << (new_rate / 1000 / 1000) << " Mbps"sv;
     });
 
@@ -1518,7 +1518,7 @@ namespace stream {
         // from client FEC-status feedback). When disabled, fall back to the
         // legacy fixed target of ~80% of 1Gbps. The controller also idles at
         // that ceiling on a clean path, so behavior there is unchanged.
-        size_t pacing_rate_bps = config::stream.adaptive_pacing ?
+        size_t pacing_rate_bps = config::stream.adaptive_bandwidth_limit ?
                                    session->video.pacing_rate_bps.load(std::memory_order_relaxed) :
                                    (std::giga::num * 80 / 100);
         //                                                              bps    ms     packet      byte

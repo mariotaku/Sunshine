@@ -184,7 +184,7 @@ namespace config {
     // bottleneck from client FEC-status feedback and paces video to ~80% of it,
     // instead of the fixed ~800 Mbps target. Prevents keyframe bursts from
     // overflowing a slow link (e.g. a 100 Mbps client behind a gigabit host).
-    bool adaptive_pacing;
+    bool adaptive_bandwidth_limit;
 
     // Video encryption settings for LAN and WAN streams
     int lan_encryption_mode;
