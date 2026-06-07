@@ -49,6 +49,7 @@ constexpr int IDX_RUMBLE_TRIGGER_DATA = 12;
 constexpr int IDX_SET_MOTION_EVENT = 13;
 constexpr int IDX_SET_RGB_LED = 14;
 constexpr int IDX_SET_ADAPTIVE_TRIGGERS = 15;
+constexpr int IDX_SS_FRAME_FEC_STATUS = 16;
 
 static const short packetTypes[] = {
   0x0305,  // Start A
@@ -67,7 +68,26 @@ static const short packetTypes[] = {
   0x5501,  // Set motion event (Sunshine protocol extension)
   0x5502,  // Set RGB LED (Sunshine protocol extension)
   0x5503,  // Set Adaptive triggers (Sunshine protocol extension)
+  // SS_FRAME_FEC_STATUS (moonlight-common-c SS_FRAME_FEC_PTYPE). Same numeric
+  // value as Set RGB LED above, but in the opposite direction: RGB LED is only
+  // ever sent host->client, while FEC status is only received client->host, so
+  // there is no collision on the receive dispatch map.
+  0x5502,  // Frame FEC status (client->host)
 };
+
+// Loss-adaptive pacing controller tunables (see plan / proposal §4).
+namespace pacing {
+  // Ceiling == the legacy fixed target (80% of 1 Gbps). The controller never
+  // exceeds this, so a clean gigabit path behaves exactly as before.
+  constexpr std::size_t ceiling_bps = std::giga::num * 80 / 100;
+  constexpr std::size_t floor_bps = 30ull * 1000 * 1000;  // don't chase random loss below this
+  constexpr double headroom = 0.8;  // settle at 80% of the discovered bottleneck
+  constexpr double loss_threshold = 0.02;  // ignore loss fractions below this (FEC noise)
+  constexpr double step_min = 0.2;  // cap a single decrease at 5x (resist transient total-loss frames)
+  constexpr std::size_t probe_step_bps = 10ull * 1000 * 1000;  // additive +10 Mbps per probe (true AIMD)
+  constexpr std::chrono::milliseconds probe_interval_min {10000};
+  constexpr std::chrono::milliseconds probe_interval_max {120000};
+}  // namespace pacing
 
 namespace asio = boost::asio;
 namespace sys = boost::system;
@@ -367,6 +387,15 @@ namespace stream {
 
       safe::mail_raw_t::event_t<bool> idr_events;
       safe::mail_raw_t::event_t<std::pair<int64_t, int64_t>> invalidate_ref_frames_events;
+
+      // Loss-adaptive pacing controller state. pacing_rate_bps is read by the
+      // video broadcast thread and written by the control thread (FEC-status
+      // handler), so it is atomic; the remaining fields are only ever touched by
+      // the single control thread.
+      std::atomic<std::size_t> pacing_rate_bps;
+      std::chrono::steady_clock::time_point pacing_last_loss;
+      std::chrono::steady_clock::time_point pacing_last_probe;
+      std::chrono::milliseconds pacing_probe_interval;
 
       std::unique_ptr<platf::deinit_t> qos;
     } video;
@@ -923,6 +952,33 @@ namespace stream {
   void controlBroadcastThread(control_server_t *server) {
     server->map(packetTypes[IDX_PERIODIC_PING], [](session_t *session, const std::string_view &payload) {
       BOOST_LOG(verbose) << "type [IDX_PERIODIC_PING]"sv;
+
+      if (!config::stream.adaptive_pacing) {
+        return;
+      }
+
+      // Probe the pacing rate back up after a sustained loss-free window. This
+      // runs on the periodic-ping cadence (~100 ms) in the control thread, the
+      // same thread that lowers the rate in the FEC-status handler, so the
+      // pacing_last_* / pacing_probe_interval fields need no synchronization.
+      auto &v = session->video;
+      auto rate = v.pacing_rate_bps.load(std::memory_order_relaxed);
+      if (rate >= pacing::ceiling_bps) {
+        return;
+      }
+
+      auto now = std::chrono::steady_clock::now();
+      if (now - v.pacing_last_loss >= v.pacing_probe_interval &&
+          now - v.pacing_last_probe >= v.pacing_probe_interval) {
+        auto new_rate = std::min(pacing::ceiling_bps, rate + pacing::probe_step_bps);
+        v.pacing_rate_bps.store(new_rate, std::memory_order_relaxed);
+        v.pacing_last_probe = now;
+        // Sustained success -> shrink the probe interval toward the minimum so a
+        // genuinely improved path is reclaimed faster (a failed probe will
+        // double it again in the FEC-status handler).
+        v.pacing_probe_interval = std::max(pacing::probe_interval_min, v.pacing_probe_interval / 2);
+        BOOST_LOG(debug) << "Adaptive pacing: probe up -> "sv << (new_rate / 1000 / 1000) << " Mbps"sv;
+      }
     });
 
     server->map(packetTypes[IDX_START_A], [&](session_t *session, const std::string_view &payload) {
@@ -947,6 +1003,59 @@ namespace stream {
         << "time in milli since last report [" << t.count() << ']' << std::endl
         << "last good frame [" << lastGoodFrame << ']' << std::endl
         << "---end stats---";
+    });
+
+    server->map(packetTypes[IDX_SS_FRAME_FEC_STATUS], [&](session_t *session, const std::string_view &payload) {
+      // SS_FRAME_FEC_STATUS (moonlight-common-c Video.h, big-endian). Sent by the
+      // client only for frames that experienced packet loss, so its arrival is
+      // itself the loss signal. We only need the data-shard counts to derive the
+      // loss fraction; the sequence-number fields are reserved for future
+      // tail-drop vs random-loss discrimination.
+      constexpr size_t k_total_data_off = 10;  // totalDataPackets (uint16, BE)
+      constexpr size_t k_recv_data_off = 14;  // receivedDataPackets (uint16, BE)
+      if (payload.size() < k_recv_data_off + sizeof(uint16_t)) {
+        return;
+      }
+
+      auto read_be16 = [](const char *p) -> uint16_t {
+        return (uint16_t) (((uint8_t) p[0] << 8) | (uint8_t) p[1]);
+      };
+      auto totalDataPackets = read_be16(payload.data() + k_total_data_off);
+      auto receivedDataPackets = read_be16(payload.data() + k_recv_data_off);
+
+      if (!config::stream.adaptive_pacing || totalDataPackets == 0) {
+        return;
+      }
+
+      // Fraction of this frame's data shards that were lost in flight.
+      int lost = std::max(0, (int) totalDataPackets - (int) receivedDataPackets);
+      double f = (double) lost / (double) totalDataPackets;
+
+      BOOST_LOG(verbose) << "type [IDX_SS_FRAME_FEC_STATUS] data "sv << receivedDataPackets
+                         << "/"sv << totalDataPackets << " loss "sv << f;
+
+      if (f <= pacing::loss_threshold) {
+        return;
+      }
+
+      // The observed delivered throughput rate*(1-f) estimates the bottleneck
+      // line rate; settle at 80% of it (the same 20% headroom the legacy fixed
+      // "80% of 1 Gbps" used). Decrease-only, and a single step is capped at a
+      // 5x cut so one transient total-loss frame can't crater us to the floor.
+      auto &v = session->video;
+      double rate = (double) v.pacing_rate_bps.load(std::memory_order_relaxed);
+      double target = pacing::headroom * rate * (1.0 - f);
+      double next = std::max(rate * pacing::step_min, std::min(rate, target));
+      auto new_rate = (size_t) std::max((double) pacing::floor_bps, next);
+      v.pacing_rate_bps.store(new_rate, std::memory_order_relaxed);
+
+      v.pacing_last_loss = std::chrono::steady_clock::now();
+      // Back off the probe cadence: loss means our last probe (or the path) was
+      // too aggressive, so wait longer before trying to climb again.
+      v.pacing_probe_interval = std::min(pacing::probe_interval_max, v.pacing_probe_interval * 2);
+
+      BOOST_LOG(debug) << "Adaptive pacing: "sv << (int) (f * 100) << "% loss -> "sv
+                       << (new_rate / 1000 / 1000) << " Mbps"sv;
     });
 
     server->map(packetTypes[IDX_REQUEST_IDR_FRAME], [&](session_t *session, const std::string_view &payload) {
@@ -1405,8 +1514,15 @@ namespace stream {
       }
 
       try {
-        // Use around 80% of 1Gbps          1Gbps            percent    ms     packet      byte
-        size_t ratecontrol_packets_in_1ms = std::giga::num * 80 / 100 / 1000 / blocksize / 8;
+        // Pace to the adaptive controller's current rate (loss-adaptive, learned
+        // from client FEC-status feedback). When disabled, fall back to the
+        // legacy fixed target of ~80% of 1Gbps. The controller also idles at
+        // that ceiling on a clean path, so behavior there is unchanged.
+        size_t pacing_rate_bps = config::stream.adaptive_pacing ?
+                                   session->video.pacing_rate_bps.load(std::memory_order_relaxed) :
+                                   (std::giga::num * 80 / 100);
+        //                                                              bps    ms     packet      byte
+        size_t ratecontrol_packets_in_1ms = std::max<size_t>(1, pacing_rate_bps / 1000 / blocksize / 8);
 
         // Send less than 64K in a single batch.
         // On Windows, batches above 64K seem to bypass SO_SNDBUF regardless of its size,
@@ -2030,6 +2146,13 @@ namespace stream {
       session->video.idr_events = mail->event<bool>(mail::idr);
       session->video.invalidate_ref_frames_events = mail->event<std::pair<int64_t, int64_t>>(mail::invalidate_ref_frames);
       session->video.lowseq = 0;
+
+      // Start the adaptive pacing controller at the ceiling; it only ratchets
+      // down on observed loss and never resets back to default (proposal §4.7).
+      session->video.pacing_rate_bps.store(pacing::ceiling_bps, std::memory_order_relaxed);
+      session->video.pacing_last_loss = std::chrono::steady_clock::now();
+      session->video.pacing_last_probe = session->video.pacing_last_loss;
+      session->video.pacing_probe_interval = pacing::probe_interval_min;
       session->video.ping_payload = launch_session.av_ping_payload;
       if (config.encryptionFlagsEnabled & SS_ENC_VIDEO) {
         BOOST_LOG(info) << "Video encryption enabled"sv;

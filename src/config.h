@@ -180,6 +180,12 @@ namespace config {
 
     int fec_percentage;
 
+    // Loss-adaptive video packet pacing. When enabled, the host learns the path
+    // bottleneck from client FEC-status feedback and paces video to ~80% of it,
+    // instead of the fixed ~800 Mbps target. Prevents keyframe bursts from
+    // overflowing a slow link (e.g. a 100 Mbps client behind a gigabit host).
+    bool adaptive_pacing;
+
     // Video encryption settings for LAN and WAN streams
     int lan_encryption_mode;
     int wan_encryption_mode;
